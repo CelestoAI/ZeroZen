@@ -1,8 +1,8 @@
 # run_agent.py
 import asyncio
 from agents import Agent, Runner, ModelSettings
-from .gmail_tool_v2 import GmailTool
-from .calendar_tool_v2 import CalendarTool
+from .gmail_tool import GmailTool
+from .calendar_tool import CalendarTool
 from .creds import load_user_credentials
 import json
 import os

@@ -1,6 +1,6 @@
 from zerozen.integrations.google import (
-    GmailToolV2,
-    CalendarToolV2,
+    GmailTool,
+    CalendarTool,
     CredentialRecord,
     UserProviderMetadata,
     UserInfo,
@@ -26,5 +26,5 @@ creds = CredentialRecord(
 )
 
 # Both tools work with same credentials
-gmail = GmailToolV2(creds)
-calendar = CalendarToolV2(creds)
+gmail = GmailTool(creds)
+calendar = CalendarTool(creds)

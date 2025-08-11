@@ -1,4 +1,4 @@
-# gmail_tool.py
+# gmail_tool_v2.py - Gmail tool with dataclass credentials support
 from __future__ import annotations
 import datetime as dt
 import typing as t
@@ -8,6 +8,10 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import base64
+
+# Import here to avoid circular imports
+if t.TYPE_CHECKING:
+    from .creds import CredentialRecord
 
 
 MessageSummary = dict[str, t.Any]
@@ -67,31 +71,38 @@ def _is_transient(err: Exception) -> bool:
 
 class GmailTool:
     """
-    Search-only Gmail integration.
-    Keep this class's API stable so you can add get_message/reply later without churn.
+    Gmail integration with Google OAuth2 credentials.
+    Accepts either Credentials or CredentialRecord objects.
     """
 
     def __init__(
-        self,
-        creds_provider: t.Callable[[str], Credentials],
-        *,
-        logger: t.Any = None,
+        self, credentials: Credentials | CredentialRecord, *, logger: t.Any = None
     ):
         """
-        creds_provider(user_id) -> google.oauth2.credentials.Credentials
-        The provider should return a valid Credentials object (with refresh token).
+        Args:
+            credentials: Google OAuth2 credentials with Gmail scope, or CredentialRecord
+            logger: Optional logger instance
         """
-        self._creds_provider = creds_provider
-        self._logger = logger
+        from .creds import CredentialRecord  # Import here to avoid circular imports
 
-    def _svc(self, user_id: str):
-        creds = self._creds_provider(user_id)
-        return build("gmail", "v1", credentials=creds, cache_discovery=False)
+        if isinstance(credentials, CredentialRecord):
+            self._credentials = credentials.to_credentials()
+        else:
+            self._credentials = credentials
+        self._logger = logger
+        self._service = None
+
+    def _svc(self):
+        """Get or create Gmail service."""
+        if self._service is None:
+            self._service = build(
+                "gmail", "v1", credentials=self._credentials, cache_discovery=False
+            )
+        return self._service
 
     def search_messages(
         self,
         *,
-        user_id: str,
         query: str,
         label_ids: list[str] | None = None,
         after: str | None = None,  # 'YYYY-MM-DD' or ISO8601
@@ -99,11 +110,21 @@ class GmailTool:
         limit: int = 20,
     ) -> dict:
         """
-        Returns: {"messages": [MessageSummary, ...]}
+        Search Gmail messages with metadata.
+
+        Args:
+            query: Gmail search string
+            label_ids: Optional Gmail label IDs to filter by
+            after: Lower bound date (inclusive)
+            before: Upper bound date (exclusive)
+            limit: Max results (1-50)
+
+        Returns:
+            {"messages": [MessageSummary, ...]}
         """
         limit = max(1, min(int(limit or 20), 50))
         q = _build_query(query, after, before)
-        svc = self._svc(user_id)
+        svc = self._svc()
 
         @backoff.on_exception(
             backoff.expo,
@@ -160,7 +181,6 @@ class GmailTool:
     def list_messages(
         self,
         *,
-        user_id: str,
         label_ids: list[str] | None = None,
         q: str | None = None,
         limit: int = 20,
@@ -168,12 +188,20 @@ class GmailTool:
         include_spam_trash: bool = False,
     ) -> dict:
         """
-        Lightweight list of message ids (and thread ids) using Gmail's list API.
+        Lightweight list of message IDs using Gmail's list API.
 
-        Returns: {"messages": [{"id": str, "threadId": str}, ...], "nextPageToken": str | None}
+        Args:
+            label_ids: Filter by label IDs
+            q: Optional Gmail query string
+            limit: Max results (1-100)
+            page_token: For pagination
+            include_spam_trash: Whether to include spam and trash
+
+        Returns:
+            {"messages": [{"id": str, "threadId": str}, ...], "nextPageToken": str | None}
         """
         limit = max(1, min(int(limit or 20), 100))
-        svc = self._svc(user_id)
+        svc = self._svc()
 
         @backoff.on_exception(
             backoff.expo,
@@ -203,18 +231,17 @@ class GmailTool:
             "nextPageToken": res.get("nextPageToken"),
         }
 
-    def get_message(
-        self,
-        *,
-        user_id: str,
-        message_id: str,
-    ) -> dict:
+    def get_message(self, *, message_id: str) -> dict:
         """
         Fetch a single message (metadata only).
 
-        Returns: {"message": MessageSummary}
+        Args:
+            message_id: Gmail message ID
+
+        Returns:
+            {"message": MessageSummary}
         """
-        svc = self._svc(user_id)
+        svc = self._svc()
 
         @backoff.on_exception(
             backoff.expo,
@@ -242,7 +269,6 @@ class GmailTool:
     def get_message_body(
         self,
         *,
-        user_id: str,
         message_id: str,
         prefer: str = "text",  # "text" or "html"
         max_chars: int = 50000,
@@ -250,14 +276,20 @@ class GmailTool:
         """
         Fetch message content and return body plus key headers.
 
-        Returns: {
-          "id", "threadId", "subject", "from", "to", "cc", "date",
-          "body_text": str | None, "body_html": str | None
-        }
+        Args:
+            message_id: Gmail message ID
+            prefer: "text" or "html" preference
+            max_chars: Maximum characters to return
+
+        Returns:
+            {
+              "id", "threadId", "subject", "from", "to", "cc", "date",
+              "body_text": str | None, "body_html": str | None
+            }
         """
         prefer = (prefer or "text").lower()
         prefer_text = prefer == "text"
-        svc = self._svc(user_id)
+        svc = self._svc()
 
         @backoff.on_exception(
             backoff.expo,

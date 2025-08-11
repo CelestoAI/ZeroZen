@@ -191,13 +191,13 @@ result = agents.run_sync(
 ### Custom Integrations
 
 ```python
-from zerozen.integrations.google import GmailToolV2, load_user_credentials
+from zerozen.integrations.google import GmailTool, load_user_credentials
 
 # Load your saved credentials
 creds = load_user_credentials("credentials.my_google_account.json")
 
 # Direct tool usage
-gmail = GmailToolV2(creds)
+gmail = GmailTool(creds)
 messages = gmail.search_messages(query="from:github.com", limit=10)
 
 # Your custom logic here...
@@ -224,7 +224,7 @@ user_creds = CredentialRecord(
 )
 
 # Use with any tool
-gmail = GmailToolV2(user_creds)
+gmail = GmailTool(user_creds)
 ```
 
 ______________________________________________________________________
