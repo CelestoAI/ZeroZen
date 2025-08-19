@@ -22,6 +22,10 @@ dependencies = [
     "google-api-core>=2.25.1",
     "google-auth>=2.40.3",
     "googleapis-common-protos>=1.70.0",
+    "sqlmodel>=0.0.22",
+    "numpy>=1.24.0",
+    "pydantic>=2.0.0",
+    "chromadb>=0.4.22",
 ]
 
 [project.scripts]
